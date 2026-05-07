@@ -11,8 +11,6 @@
 #define DIR_GPIO_NUM             22
 #define MCPWM_RESOLUTION_HZ 1000000 // 1MHz 
 #define STEPS_PER_REV       3200
-#define PULLEY_CIRCUM_MM    40.0    // 20 răng * 2mm
-#define STEPS_PER_MM        (STEPS_PER_REV / PULLEY_CIRCUM_MM) // 80 steps/mm
 #define MOTOR_TIMEBASE_PERIOD 20000
 
 static const char* TAG = "TEST_MCPWM";
@@ -77,45 +75,71 @@ void app_main(void)
     ESP_ERROR_CHECK(mcpwm_timer_enable(timer));
     ESP_ERROR_CHECK(mcpwm_timer_start_stop(timer, MCPWM_TIMER_START_NO_STOP));
 
-    const float RAY_SAFE_LIMIT_MM = 200.0; // Đi từ tâm ra biên là 200mm (tổng sải 400mm)
+    const float RAY_SAFE_LIMIT_MM = 100.0; // Đi từ tâm ra biên là 200mm (tổng sải 400mm)
     const float SINE_PERIOD_SEC = 10.0;    // Chu kỳ 10 giây
     const float PULLEY_CIRCUM = 80.0;    
     const float MIN_SPEED_HZ = 20.0;
     float max_rpm = 75;
     float t = 0.0;
     const float dt = 0.02;
-    while(1)
-    {
-        float current_rpm = max_rpm * sinf(2.0f * M_PI * (1.0f / SINE_PERIOD_SEC) * t);        // float speed = (rpm * 3200.0) / 60.0;
-        // uint32_t period = MCPWM_RESOLUTION_HZ / (uint32_t)speed;
-        gpio_set_level(DIR_GPIO_NUM, (current_rpm >= 0) ? 0 : 1);
+    const float MAX_SPEED_MM_S = 400.0f;  // Vận tốc tối đa (rất nhanh)
+const float ACCEL_MM_S2 = 1200.0f;    // Gia tốc (mm/s^2)
+const float SAFE_BOUNDARY = 200.0f;   // Biên âm -200mm, biên dương +200mm (tổng 400mm)
+const float STEPS_PER_MM = 40.0f;
+float current_pos_mm = 0.0f;
+float current_vel_mm_s = 0.0f;
+float target_pos_mm = -SAFE_BOUNDARY; // Bắt đầu lao sang trái
+while(1)
+{
+    // 1. Xác định hướng đi hiện tại
+    float direction = (target_pos_mm > current_pos_mm) ? 1.0f : -1.0f;
+    float dist_to_target = fabsf(target_pos_mm - current_pos_mm);
 
-        float speed_hz = (fabsf(current_rpm) * 3200.0f) / 60.0f;
-        printf(">RPM:%.2f\n", current_rpm);
-    if (speed_hz > MIN_SPEED_HZ) {
-            uint32_t period = (uint32_t)(MCPWM_RESOLUTION_HZ / speed_hz);
-            
-            // Giới hạn period an toàn (thường MCPWM timer 16-bit max là 65535)
-            if (period > 65000) period = 65000;
+    // 2. Tính toán Vận tốc Hình thang (Trapezoidal)
+    if (dist_to_target > 0.5f) { // Nếu chưa chạm đích
+        // Tính quãng đường cần thiết để phanh dừng lại: s = v^2 / (2a)
+        float braking_dist = (current_vel_mm_s * current_vel_mm_s) / (2.0f * ACCEL_MM_S2);
 
-            mcpwm_timer_set_period(timer, period);
-            mcpwm_comparator_set_compare_value(comparator, period / 2);
-            
-            // Đảm bảo Generator đang phát xung
-            mcpwm_generator_set_force_level(generator, -1, true); 
+        if (dist_to_target > braking_dist) {
+            // Đang xa đích -> Tăng tốc
+            current_vel_mm_s += ACCEL_MM_S2 * 0.02f; // dt = 20ms = 0.02s
+            if (current_vel_mm_s > MAX_SPEED_MM_S) current_vel_mm_s = MAX_SPEED_MM_S;
         } else {
-            // Tốc độ quá thấp (điểm chết của sóng sine) -> Dừng phát xung
-            mcpwm_generator_set_force_level(generator, 0, true);
+            // Sắp đến đích -> Giảm tốc (phanh)
+            current_vel_mm_s -= ACCEL_MM_S2 * 0.02f;
+            if (current_vel_mm_s < 20.0f) current_vel_mm_s = 20.0f; // Vận tốc tối thiểu để không đứng im sớm
         }
-
-        // 5. Cập nhật thời gian và Delay
-        t += dt;
-        // Reset t để tránh sai số trôi điểm động khi chạy thời gian cực dài
-        if (t > SINE_PERIOD_SEC) t -= SINE_PERIOD_SEC;
-
-        vTaskDelay(pdMS_TO_TICKS(20));
-
+    } else {
+        // Đã chạm biên -> Dừng 0.3s rồi đổi mục tiêu sang biên ngược lại
+        current_vel_mm_s = 0;
+        vTaskDelay(pdMS_TO_TICKS(300));
+        target_pos_mm = (target_pos_mm == -SAFE_BOUNDARY) ? SAFE_BOUNDARY : -SAFE_BOUNDARY;
     }
+
+    // 3. Cập nhật vị trí giả lập và hướng motor
+    current_pos_mm += current_vel_mm_s * 0.02f * direction;
+    gpio_set_level(DIR_GPIO_NUM, (direction >= 0) ? 0 : 1);
+
+    // 4. Quy đổi sang Hz và nạp vào MCPWM
+    float speed_hz = current_vel_mm_s * STEPS_PER_MM;
+    
+    printf(">Pos_mm:%.2f\n", current_pos_mm);
+    printf(">Vel_mm_s:%.2f\n", current_vel_mm_s * direction);
+
+    if (speed_hz > MIN_SPEED_HZ) {
+        uint32_t period = (uint32_t)(MCPWM_RESOLUTION_HZ / speed_hz);
+        if (period > 65000) period = 65000;
+
+        mcpwm_timer_set_period(timer, period);
+        mcpwm_comparator_set_compare_value(comparator, period / 2);
+        mcpwm_generator_set_force_level(generator, -1, true); 
+    } 
+    else {
+        mcpwm_generator_set_force_level(generator, 0, true);
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(20));
+}
 
 
 
