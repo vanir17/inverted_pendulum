@@ -1,3 +1,3 @@
-idf_component_register(SRCS "nema_motor_impl.c" "nema_motor.c"
+idf_component_register(SRCS "nema_motor_impl.c"
                     INCLUDE_DIRS "."
                     PRIV_REQUIRES "driver")

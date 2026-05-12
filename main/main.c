@@ -81,10 +81,10 @@ void app_main(void)
     const float MIN_SPEED_HZ = 20.0;
     float max_rpm = 75;
     float t = 0.0;
-    const float dt = 0.02;
-    const float MAX_SPEED_MM_S = 400.0f;  // Vận tốc tối đa (rất nhanh)
+    const float dt = 0.01f;
+    const float MAX_SPEED_MM_S = 500.0f;  // Vận tốc tối đa (rất nhanh)
 const float ACCEL_MM_S2 = 1200.0f;    // Gia tốc (mm/s^2)
-const float SAFE_BOUNDARY = 200.0f;   // Biên âm -200mm, biên dương +200mm (tổng 400mm)
+const float SAFE_BOUNDARY = 85.0f;   // Biên âm -200mm, biên dương +200mm (tổng 400mm)
 const float STEPS_PER_MM = 40.0f;
 float current_pos_mm = 0.0f;
 float current_vel_mm_s = 0.0f;

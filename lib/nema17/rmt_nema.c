@@ -38,6 +38,10 @@ esp_err_t rmt_nema_set_speed(rmt_nema_config_t *config, int64_t speed_hz)
     rmt_transmit_config_t tx_config = {
         .loop_count = -1, 
     };
+    // if (abs(speed_hz) < 10) { // Nếu tốc độ quá thấp, cho dừng hẳn hoặc giữ nguyên
+    //  // Không nạp lại xung mới ở vùng vận tốc gần bằng 0 để tránh rung động cộng hưởng
+    //  return ESP_OK; 
+    // }
     // ESP_ERROR_CHECK();
     // ESP_LOGD(TAG, "Hello %d", speed);
     rmt_enable(g_tx_channel);
@@ -62,7 +66,8 @@ esp_err_t init_rmt(const rmt_nema_config_t *config)
         .gpio_num = config->step_pin,   
         .mem_block_symbols = 128, 
         .resolution_hz = config->rmt_resolution_hz, 
-        .trans_queue_depth = 4, 
+        .trans_queue_depth = 1,
+        .flags.with_dma = false, 
     };
     ESP_ERROR_CHECK(rmt_new_tx_channel(&tx_chan_config, &g_tx_channel));
     ESP_ERROR_CHECK(rmt_enable(g_tx_channel));
@@ -79,17 +84,17 @@ esp_err_t init_rmt(const rmt_nema_config_t *config)
 }
 
 
-esp_err_t rmt_tx_stop(rmt_channel_t channel)
-{
-    ESP_RETURN_ON_FALSE(RMT_IS_TX_CHANNEL(channel), ESP_ERR_INVALID_ARG, TAG, RMT_CHANNEL_ERROR_STR);
-    RMT_ENTER_CRITICAL();
-#if SOC_RMT_SUPPORT_ASYNC_STOP
-    rmt_ll_tx_stop(rmt_contex.hal.regs, channel);
-#else
-    // write ending marker to stop the TX channel
-    RMTMEM.chan[channel].data32[0].val = 0;
-#endif
-    rmt_ll_tx_reset_pointer(rmt_contex.hal.regs, channel);
-    RMT_EXIT_CRITICAL();
-    return ESP_OK;
-}
+// esp_err_t rmt_tx_stop(rmt_channel_t channel)
+// {
+//     ESP_RETURN_ON_FALSE(RMT_IS_TX_CHANNEL(channel), ESP_ERR_INVALID_ARG, TAG, RMT_CHANNEL_ERROR_STR);
+//     RMT_ENTER_CRITICAL();
+// #if SOC_RMT_SUPPORT_ASYNC_STOP
+//     rmt_ll_tx_stop(rmt_contex.hal.regs, channel);
+// #else
+//     // write ending marker to stop the TX channel
+//     RMTMEM.chan[channel].data32[0].val = 0;
+// #endif
+//     rmt_ll_tx_reset_pointer(rmt_contex.hal.regs, channel);
+//     RMT_EXIT_CRITICAL();
+//     return ESP_OK;
+// }
