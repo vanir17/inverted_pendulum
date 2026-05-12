@@ -3,9 +3,15 @@
 #include <stdint.h>
 #include "esp_err.h"
 
-typedef struct motor_t motor_t; 
-typedef struct motor_t *motor_handle_t;
 
+struct motor_t 
+{
+    esp_err_t (*del)(struct motor_t *motor);
+};
+typedef struct motor_t motor_t; 
+
+
+typedef struct motor_t *motor_handle_t;
 typedef struct motor_mcpwm {
     int group_id; /* MCPWM group number */
     uint32_t resolution_hz; /* MCPWM timer resolution */

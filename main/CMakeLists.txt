@@ -3,7 +3,7 @@ idf_component_register(SRCS "main.c"
                        esp_driver_pcnt 
                        esp_driver_gpio 
                        encoder_rotary_HN3806 
-                       nema17
+                       nema17_mcpwm
                        esp_timer
                        driver
                        esp_driver_mcpwm
