@@ -36,7 +36,7 @@ void app_main(void)
         .pwm_freq_hz = 1000, 
     };
 
-    ESP_LOGI(TAG, "Initializing Nema 17 motor...");
+    ESP_LOGI(TAG, "Initialize Stepper Motor...");
     ESP_ERROR_CHECK(motor_new_mcpwm_device(&motor_conf, &mcpwm_config, &motor));
 
     motor_enable(motor);
