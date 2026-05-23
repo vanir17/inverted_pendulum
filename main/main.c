@@ -8,7 +8,8 @@
 
 #include "nema_motor.h"
 #include "nema_motor_defs.h"
-
+#include "encoder.h"
+#include "encoder_defs.h"
 
 #define PPR      3200
 #define MOTOR_TIMEBASE_PERIOD 20000
@@ -22,32 +23,22 @@ static const char* TAG = "--MAIN";
 void app_main(void) 
 {
 
-    motor_handle_t motor = NULL;
+    pcnt_unit_handle_t encoder_hn3806_unit = NULL;
+    encoder_t* encoder_hn3806 = NULL;
+    ESP_ERROR_CHECK(init_encoder(&encoder_hn3806_unit, &encoder_hn3806));
 
-    motor_mcpwm_config_t mcpwm_config = 
-    {
-        .group_id = 0,
-        .resolution_hz = MCPWM_RESOLUTION_HZ,
-    };
+    float angle_radian = 0.0;
+    float angle_degreee = 0.0;
 
-    motor_config_t motor_conf = {
-        .pwma_gpio_num = STEP_GPIO,
-        .dir_gpio_num = DIR_GPIO,
-        .pwm_freq_hz = 1000, 
-    };
-
-    ESP_LOGI(TAG, "Initialize Stepper Motor...");
-    ESP_ERROR_CHECK(motor_new_mcpwm_device(&motor_conf, &mcpwm_config, &motor));
-
-    motor_enable(motor);
 
     while(1)
     {
-        motor_set_speed(motor, 0);
-        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        ESP_ERROR_CHECK(encoder_get_radian(encoder_hn3806, &angle_radian));
+        ESP_ERROR_CHECK(encoder_get_degrees(encoder_hn3806, &angle_degreee));
+        printf("/*%.2f*/\n", angle_degreee);
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
-
-
 
 }
 
