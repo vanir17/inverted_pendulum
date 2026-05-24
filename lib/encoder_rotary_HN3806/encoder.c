@@ -5,13 +5,44 @@
 #include "stdint.h"
 
 #define _impl(x)    ((encoder_esp_t*)(x))
+#define M_PI 3.14159265358979323846f
 
-static const char* TAG = "Rotary_Encoder";
+
+
+static const char* TAG = "Rotary_Encoder_HN3806";
 
 typedef struct
 {
     pcnt_unit_handle_t unit;
 }encoder_esp_t;
+
+
+
+esp_err_t encoder_get_radian(encoder_t* _this, float* _result)
+{
+    encoder_esp_t* encoder_t = _impl(_this);
+    int pulseCount = 0;
+
+    ESP_ERROR_CHECK(pcnt_unit_get_count(encoder_t->unit, &pulseCount));
+    int32_t count = pulseCount;
+
+    if(count < 0) 
+    {
+        count = PULSES_PER_REV + (count % PULSES_PER_REV);
+    }
+
+    count = count % PULSES_PER_REV;
+
+    if (count > PULSES_PER_REV / 2) 
+    {
+        count -= PULSES_PER_REV;
+    }
+
+    *_result = ((float)count * 2.0f * (float)M_PI) / PULSES_PER_REV;
+
+
+    return ESP_OK;
+}
 
 esp_err_t init_encoder(pcnt_unit_handle_t* pcnt_unit, encoder_t** result)
 {
@@ -81,7 +112,7 @@ esp_err_t init_encoder(pcnt_unit_handle_t* pcnt_unit, encoder_t** result)
     ESP_LOGI(TAG, "start pcnt unit");
     ESP_ERROR_CHECK(pcnt_unit_start(*pcnt_unit));
 
-    *result = new_encoder;
+    *result = (encoder_t*)new_encoder;
     return ESP_OK;
 }
 
@@ -99,7 +130,6 @@ esp_err_t encoder_get_degrees(encoder_t* _this, float* _result)
     count = count % PULSES_PER_REV;
 
     *_result = ((float)count * 360.0f) / PULSES_PER_REV;
-    ESP_LOGI(TAG, "Count: %d | Angle: %.2f", count, *_result);
 
     return ESP_OK;
 }
