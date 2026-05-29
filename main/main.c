@@ -216,7 +216,7 @@ void lqr_control(void *pvParameters)
             set_stepper_velocity(0.0f);
             gpio_set_level(EN_GPIO_TMC2209, 1); // 1 = off, no more holding torque
         }
-        ESP_LOGI(TAG,"Theta: %.3f rad | %.2f deg", theta, theta * 180.0f / 3.1415f);        
+        ESP_LOGI(TAG,"Theta: %.3f rad | %.2f deg | %.2f m/s", theta, theta * 180.0f / 3.1415f, current_velocity);        
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
 
     }
