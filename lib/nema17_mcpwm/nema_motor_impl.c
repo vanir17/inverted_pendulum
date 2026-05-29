@@ -93,6 +93,7 @@ esp_err_t motor_set_speed(motor_handle_t motor, uint32_t speed_hz)
 
     mcpwm_generator_set_force_level(mcpwm_motor->gen, -1, true);
 
+    ESP_LOGI(TAG, "speed_hz: %d", speed_hz);
     return ESP_OK;
 }
 

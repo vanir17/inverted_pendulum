@@ -26,8 +26,8 @@
 #define MAX_STEPS       (RANGE_MM * STEPS_PER_MM) // 9000
 // #define M_PI 3.14159f
 #define DT 0.005f
-#define MAX_ACCEL 5 // m/s^2
-#define MAX_VELOCITY 5 // m/s
+#define MAX_ACCEL 10 // m/s^2
+#define MAX_VELOCITY 10 // m/s
 #define PULLEY_CIRCUMFERENCE 0.08f // Pulley: C = 2 * pi *  R = 0.08m
 #define MICROSTEPS 3200.0f
 
@@ -51,7 +51,7 @@ float prev_x = 0.0f;
 float prev_theta = 0.0f;
 float current_velocity = 0.0f;  
 
-const float K[4] = {-43.8476f, -130.0516f, -33.7487f, -14.3827f};
+const float K[4] = {-35.5340f, -250.6085f, -33.7086f, -50.2635f};
 
 static bool IRAM_ATTR on_reach_boundary(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_ctx)
 {
@@ -61,9 +61,7 @@ static bool IRAM_ATTR on_reach_boundary(pcnt_unit_handle_t unit, const pcnt_watc
 
 float wrap_angle(float angle) 
 {
-    float wrapped = fmodf(angle + (float)M_PI, 2.0f * (float)M_PI);
-    if (wrapped < 0.0f) wrapped += 2.0f * (float)M_PI;
-    return wrapped - (float)M_PI;
+    return atan2f(sinf(angle), cosf(angle));
 }
 
 void init_system() 
@@ -146,7 +144,7 @@ void set_stepper_velocity(float velocity_m_s)
     float freq_hz = (abs_v / PULLEY_CIRCUMFERENCE) * MICROSTEPS;
 
     // Giới hạn tần số tối đa an toàn cho MCPWM (thử ở mức 20kHz - 25kHz)
-    if (freq_hz > 20000) freq_hz = 20000; 
+    if (freq_hz > 40000) freq_hz = 40000; 
     
     // Tránh tần số quá thấp gây lỗi chia cho 0 hoặc period quá lớn
     if (freq_hz < 10) freq_hz = 0; 
@@ -169,34 +167,27 @@ void lqr_control(void *pvParameters)
         int x_steps = 0;
         pcnt_unit_get_count(pcnt_unit, &x_steps);
         float x = (float)x_steps * (PULLEY_CIRCUMFERENCE/ MICROSTEPS);
-        float raw_theta = 0.0f;
-        ESP_ERROR_CHECK(encoder_get_radian(encoder_hn3806, &raw_theta));
 
-        float theta = wrap_angle(raw_theta);
+        float raw_theta = 0.0f;
+        encoder_get_radian(encoder_hn3806, &raw_theta);
+        float theta = wrap_angle(raw_theta + (float)M_PI);
 
         float x_dot = (x - prev_x) / DT;
 
-        static float filtered_theta_dot = 0;
-        float raw_theta_dot = wrap_angle(theta - prev_theta) / DT;
-        filtered_theta_dot = 0.7f * filtered_theta_dot + 0.3f * raw_theta_dot;
+        float delta_theta = wrap_angle(theta - prev_theta);
+        float theta_dot = delta_theta / DT;
 
         prev_x = x;
         prev_theta = theta;
 
         //u = - K * x
-        float u_accel =  (K[0] * x + K[1] * theta + K[2] * x_dot + K[3] * filtered_theta_dot);
+        float u_accel =  (K[0] * x + K[1] * theta + K[2] * x_dot + K[3] * theta_dot);
 
         if (u_accel > MAX_ACCEL) u_accel = MAX_ACCEL;
         if (u_accel < -MAX_ACCEL) u_accel = -MAX_ACCEL;
 
-        static float filtered_u = 0.0f;
-    // Hệ số alpha (0.2 - 0.5). Alpha càng nhỏ, xe chạy càng mượt nhưng sẽ hơi trễ.
-        float alpha = 0.3f; 
-
-        filtered_u = (alpha * u_accel) + (1.0f - alpha) * filtered_u;
-
-    // Sử dụng filtered_u để tích phân vận tốc thay vì u_accel gốc
-        current_velocity += (filtered_u * DT);
+        
+        current_velocity += (u_accel * DT);
         // v = v0 + a*t
         // current_velocity = current_velocity + (u_accel * DT);
 
@@ -205,7 +196,7 @@ void lqr_control(void *pvParameters)
         
         
         
-        if(fabs(theta) < 0.25f)
+        if(fabs(theta) < 0.7f)
         {
             gpio_set_level(EN_GPIO_TMC2209, 0); // Đảm bảo driver được bật
             set_stepper_velocity(current_velocity);
