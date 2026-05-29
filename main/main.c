@@ -19,7 +19,7 @@
 #define DIR_GPIO_NUM        22
 #define PCNT_STEP_INPUT 21 // Nối dây từ 23 sang 21
 #define PCNT_DIR_INPUT  19 // Nối dây từ 22 sang 19
-
+#define EN_GPIO_TMC2209 18
 
 #define STEPS_PER_MM    40
 #define RANGE_MM        200
@@ -99,6 +99,18 @@ void init_system()
     ESP_ERROR_CHECK(pcnt_unit_enable(pcnt_unit));
     ESP_ERROR_CHECK(pcnt_unit_clear_count(pcnt_unit)); 
     ESP_ERROR_CHECK(pcnt_unit_start(pcnt_unit));
+
+
+
+    gpio_config_t en_conf = {
+        .pin_bit_mask = (1ULL << EN_GPIO_TMC2209),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&en_conf);
+
+    gpio_set_level(EN_GPIO_TMC2209, 0); // 0 = enable
 }
 
 void safe_move(int speed_hz, int direction) 
@@ -166,7 +178,7 @@ void lqr_control(void *pvParameters)
 
         static float filtered_theta_dot = 0;
         float raw_theta_dot = wrap_angle(theta - prev_theta) / DT;
-        filtered_theta_dot = 0.2f * filtered_theta_dot + 0.3f * raw_theta_dot;
+        filtered_theta_dot = 0.7f * filtered_theta_dot + 0.3f * raw_theta_dot;
 
         prev_x = x;
         prev_theta = theta;
@@ -179,9 +191,9 @@ void lqr_control(void *pvParameters)
 
         static float filtered_u = 0.0f;
     // Hệ số alpha (0.2 - 0.5). Alpha càng nhỏ, xe chạy càng mượt nhưng sẽ hơi trễ.
-    float alpha = 0.3f; 
+        float alpha = 0.3f; 
 
-    filtered_u = (alpha * u_accel) + (1.0f - alpha) * filtered_u;
+        filtered_u = (alpha * u_accel) + (1.0f - alpha) * filtered_u;
 
     // Sử dụng filtered_u để tích phân vận tốc thay vì u_accel gốc
         current_velocity += (filtered_u * DT);
@@ -195,14 +207,16 @@ void lqr_control(void *pvParameters)
         
         if(fabs(theta) < 0.25f)
         {
+            gpio_set_level(EN_GPIO_TMC2209, 0); // Đảm bảo driver được bật
             set_stepper_velocity(current_velocity);
         }
         else
         {
             current_velocity = 0.0f;
             set_stepper_velocity(0.0f);
+            gpio_set_level(EN_GPIO_TMC2209, 1); // 1 = off, no more holding torque
         }
-        ESP_LOGI(TAG,"Theta: %.3f rad | %.2f deg\n", theta, theta * 180.0f / 3.1415f);        
+        ESP_LOGI(TAG,"Theta: %.3f rad | %.2f deg", theta, theta * 180.0f / 3.1415f);        
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
 
     }
